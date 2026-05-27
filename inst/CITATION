@@ -1,0 +1,9 @@
+bibentry(
+  bibtype = "Unpublished",
+  title = "Robust Real-Time Macroeconomic Trend Extraction: A Gradient Boosting Approach",
+  author = person("Michal", "Kinel"),
+  year = 2026,
+  note = "Working Paper, SSRN",
+  url = "https://doi.org/10.2139/ssrn.6371138",
+  doi = "10.2139/ssrn.6371138"
+)
