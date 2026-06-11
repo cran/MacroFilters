@@ -6,46 +6,68 @@
 \usage{
 mbh_filter(
   x,
+  d = "auto",
+  boot_iter = 0,
+  block_size = "auto",
   knots = NULL,
   mstop = 500L,
-  d = NULL,
   nu = 0.1,
   df = 4L,
   select_mstop = FALSE,
-  boundary.knots = NULL
+  boundary.knots = NULL,
+  hp_lambda = NULL
 )
 }
 \arguments{
 \item{x}{Numeric vector, \code{ts}, \code{xts}, or \code{zoo} object.}
 
+\item{d}{Numeric or \code{"auto"}.
+The delta parameter for Huber loss. If \code{"auto"} (default), it is
+calibrated as \code{stats::mad(.hp_fast(x))}, i.e. the MAD of the HP cyclical
+residual. This anchors the threshold to the output-gap scale rather than
+the growth-rate scale, avoiding the under-truncation failure mode of the
+legacy \code{mad(diff(y))} heuristic. A \code{message()} is emitted reporting the
+exact value chosen. Supply an explicit positive numeric to override.}
+
+\item{boot_iter}{Non-negative integer.
+Number of block-bootstrap iterations for uncertainty quantification
+(default \code{0}, bootstrap disabled). When \verb{> 0}, the function adds
+\verb{$trend_lower} and \verb{$trend_upper}: a 95\% normal-approximation band,
+\verb{trend +/- 1.96 * sd(bootstrap trends)}, centred on the estimated trend.
+The bootstrap sd is used instead of empirical percentiles because it is
+smooth and stable at practical \code{boot_iter}. Each bootstrap refit uses the
+same \code{mstop} as the base fit, so larger \code{boot_iter} raises cost linearly.
+See also \code{block_size}.}
+
+\item{block_size}{Positive integer or \code{"auto"}.
+Block length for the moving-block bootstrap (used only when
+\code{boot_iter > 0}). If \code{"auto"} (default), it is set to
+\code{2 * stats::frequency(x)} (two full cycles), bounded above by
+\code{floor(length(x) / 3)} to keep at least three blocks.}
+
 \item{knots}{Integer.
 Number of interior knots for the P-Spline.
-If \code{NULL} (default), it is calculated as \code{max(20, floor(n / 2))}.
-High knot density is required for the trend to be flexible enough.}
+If \code{NULL} (default), it is calculated as \code{min(max(20, floor(n / 2)), 250)}.
+High knot density keeps the trend flexible, while the cap of 250 keeps the
+B-spline basis bounded for long / high-frequency series: in a P-spline the
+smoothness is governed by the difference penalty (via \code{df}, \code{mstop}, \code{nu}),
+not by the knot count, so beyond a few hundred knots the extra basis
+columns only inflate memory and runtime without adding useful flexibility.}
 
 \item{mstop}{Integer.
 Maximum number of boosting iterations (default 500).
 If \code{select_mstop = TRUE} this is the upper bound; the actual stopping
-point is chosen by AICc.}
+point is chosen by AICc.
 
-\item{d}{Numeric or \code{NULL}.
-The delta parameter for Huber loss. If \code{NULL} (default), it is
-auto-calibrated as the Median Absolute Deviation (MAD) of the first
-differences of the series (\code{mad(diff(y))}).
-
-\strong{Scale-mismatch warning:} When \code{x} is a log-level series,
-\code{diff(y)} returns inter-period growth rates (typical scale 0.001–0.02),
-whereas the output gap (the residual the filter must explain) has a much
-larger scale (typical scale 0.01–0.05). Using \code{mad(diff(y))} as \code{d}
-therefore sets the Huber threshold far too low: the filter treats normal
-business-cycle oscillations as outliers, truncates their gradients, and
-blocks learning. The trend becomes over-smooth and the cycle absorbs
-too much long-run variance.
-
-\strong{Recommendation:} For a quick preliminary calibration use
-\code{d = mad(hp_filter(x)$cycle)}, which sets the threshold on the residual
-scale. Supply an explicit numeric value to override the automatic
-fallback entirely.}
+\strong{Under-smoothing warning (\code{mstop} vs \code{d}):} when \code{d} is small relative
+to the trend's range -- the typical case for long log-level series, where
+the cycle (hence the auto-calibrated \code{d}) is tiny but the trend spans a
+large range -- the Huber loss caps the gradient from the first iteration,
+so each boosting step advances the trend only slightly. Reducing \code{mstop}
+then leaves the trend unable to climb its full range: it collapses to a
+nearly flat curve while the cycle absorbs the long-run variation. Keep the
+default \code{mstop = 500} (or higher) for such series; lower it only for short
+or high-cycle-variance inputs.}
 
 \item{nu}{Numeric.
 The learning rate (shrinkage) for boosting (default 0.1).}
@@ -82,11 +104,26 @@ experimental option and validate visually before relying on it.}
 domain for the B-spline basis (e.g., \code{c(1, T_max)}). If \code{NULL} (default),
 the range of \code{time_idx} is used. For real-time stability, fix this to the
 full-sample domain so the basis does not shift as the sample grows.}
+
+\item{hp_lambda}{Numeric or \code{NULL}.
+Smoothing parameter for the internal HP filter used to auto-calibrate
+\code{d} (only relevant when \code{d = "auto"}). If \code{NULL} (default), it is derived
+from \code{stats::frequency(x)} via the Ravn-Uhlig rule. \strong{Supply this when
+\code{x} is a plain numeric vector whose true frequency is not annual}, since
+\code{frequency()} returns \code{1} for unclassed vectors and would otherwise
+under-smooth the calibration cycle (e.g. monthly data: \code{hp_lambda = 129600}).}
 }
 \value{
-A \code{macrofilter} object with \code{trend}, \code{cycle}, \code{data}, and \code{meta}
-components.  The \code{meta} list contains \code{method = "MBH"}, \code{knots}, \code{d},
-\code{mstop}, \code{nu}, \code{df}, \code{select_mstop}, and \code{compute_time}.
+A list of class \code{c("macrofilter", "list")} with:
+\describe{
+\item{\verb{$trend}}{Numeric trend vector.}
+\item{\verb{$cycle}}{Numeric cycle vector.}
+\item{\verb{$data}}{Original input as numeric.}
+\item{\verb{$meta}}{Named list: \code{method}, \code{knots}, \code{d}, \code{mstop}, \code{nu},
+\code{df}, \code{select_mstop}, \code{compute_time}.}
+\item{\verb{$trend_lower}, \verb{$trend_upper}}{95\% normal-approximation bootstrap
+band (\verb{trend +/- 1.96 * sd}). Present only when \code{boot_iter > 0}.}
+}
 }
 \description{
 Decomposes a time series into trend and cycle using a robust boosting
@@ -98,18 +135,18 @@ them from distorting the trend.
 The model estimated is an additive model:
 \deqn{y_t = \text{Linear}(t) + \text{Smooth}(t) + \epsilon_t}
 
-It is fitted using \code{\link[mboost:gamboost]{mboost::mboost()}} with:
+It is fitted using \code{\link[mboost:mboost]{mboost::mboost()}} with:
 \itemize{
-\item \strong{Base Learners:} A linear time trend (\code{\link[mboost:baselearners]{mboost::bols()}}) to capture
-the global path, plus a B-spline (\code{\link[mboost:baselearners]{mboost::bbs()}}) to capture local
+\item \strong{Base Learners:} A linear time trend (\code{\link[mboost:bols]{mboost::bols()}}) to capture
+the global path, plus a B-spline (\code{\link[mboost:bbs]{mboost::bbs()}}) to capture local
 curvature.
-\item \strong{Loss Function:} Huber loss (\code{\link[mboost:Family]{mboost::Huber()}}) with parameter
+\item \strong{Loss Function:} Huber loss (\code{\link[mboost:Huber]{mboost::Huber()}}) with parameter
 \code{d}.  This is the key to robustness.
 }
 
-The default parameters (\code{knots = n/2}, \code{mstop = 500}) are calibrated to
-mimic the flexibility of a standard HP filter while retaining the robustness
-of the Huber loss.
+The default parameters (\code{knots = min(n/2, 250)}, \code{mstop = 500}) are
+calibrated to mimic the flexibility of a standard HP filter while retaining
+the robustness of the Huber loss.
 }
 \section{Calibration Guidance}{
 

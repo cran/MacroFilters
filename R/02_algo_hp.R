@@ -17,6 +17,7 @@
 #' @param freq Numeric frequency override (1 = annual, 4 = quarterly,
 #'   12 = monthly). Used only when `lambda` is `NULL` and the frequency cannot
 #'   be inferred from `x`.
+#' @inheritParams mbh_filter
 #'
 #' @details
 #' The HP filter minimises
@@ -33,8 +34,9 @@
 #' `lambda = 6.25 * freq^4`, yielding 6.25 (annual), 1600 (quarterly), and
 #' 129 600 (monthly).
 #'
-#' @return A `macrofilter` object with `trend`, `cycle`, `data`, and `meta`
-#'   components.
+#' @return A list of class `c("macrofilter", "list")` with `trend`, `cycle`,
+#'   `data`, and `meta`. When `boot_iter > 0` it also carries `trend_lower`
+#'   and `trend_upper` (95% normal-approximation bootstrap band).
 #'
 #' @references
 #' Hodrick, R.J. and Prescott, E.C. (1997). Postwar U.S. Business Cycles: An
@@ -53,7 +55,8 @@
 #' y <- ts(cumsum(rnorm(200)), start = c(2000, 1), frequency = 4)
 #' result <- hp_filter(y)
 #' print(result)
-hp_filter <- function(x, lambda = NULL, freq = NULL) {
+hp_filter <- function(x, lambda = NULL, freq = NULL,
+                      boot_iter = 0, block_size = "auto") {
 
   # 1. Ingest ----------------------------------------------------------------
   inputs <- ensure_computable(x)
@@ -106,18 +109,41 @@ hp_filter <- function(x, lambda = NULL, freq = NULL) {
 
   elapsed <- (proc.time() - t0)[["elapsed"]]
 
-  # 7. Package into macrofilter -----------------------------------------------
-  result <- new_macrofilter(
-    cycle = cycle_num,
+  # 7. Optional block bootstrap ----------------------------------------------
+  ci_bands <- NULL
+  if (boot_iter > 0L) {
+    bs <- .resolve_block_size(x, block_size, n)
+    CH <- .build_hp_cholesky(n, lambda)        # factorize once, reuse per replicate
+    ff <- function(y_b) y_b - .hp_fast(y_b, CH = CH)
+    ci_bands <- .boot_engine(
+      filter_func = ff,
+      trend_base  = trend_num,
+      cycle_base  = cycle_num,
+      boot_iter   = as.integer(boot_iter),
+      block_size  = bs
+    )
+  }
+
+  # 8. Build S3 result --------------------------------------------------------
+  result <- list(
     trend = trend_num,
+    cycle = cycle_num,
     data  = y,
     meta  = list(
       method       = "HP",
       lambda       = lambda,
-      compute_time = elapsed
+      compute_time = elapsed,
+      ts_class     = inputs$class,
+      tsp          = inputs$tsp,
+      idx          = inputs$idx
     )
   )
-  validate_macrofilter(result)
+  if (!is.null(ci_bands)) {
+    result$trend_lower <- ci_bands$lower
+    result$trend_upper <- ci_bands$upper
+  }
+  class(result) <- c("macrofilter", "list")
 
+  validate_macrofilter(result)
   result
 }

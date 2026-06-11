@@ -399,11 +399,11 @@ not drift upward to correct an inflated initial under-estimate.</p></li>
 <li><p><strong>Frozen B-spline domain</strong> —
 <code>knots = 50L</code> and <code>boundary.knots = c(1, T_max)</code>
 are computed once so every vintage uses an identical basis. Without
-this, the default formula <code>max(20, floor(n/2))</code> increases the
-knot count as <code>n</code> grows, giving later vintages progressively
-more spectral flexibility.</p></li>
+this, the default formula <code>min(max(20, floor(n/2)), 250)</code>
+increases the knot count as <code>n</code> grows (up to the cap of 250),
+giving later vintages progressively more spectral flexibility.</p></li>
 </ol>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>T_max    <span class="ot">&lt;-</span> <span class="fu">nrow</span>(us_gdp_vintage)   <span class="co"># full-sample size (316 rows as of 2025)</span></span>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>T_max    <span class="ot">&lt;-</span> <span class="fu">nrow</span>(us_gdp_vintage)   <span class="co"># full-sample size (computed from the data)</span></span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>ref_date <span class="ot">&lt;-</span> <span class="fu">as.Date</span>(<span class="st">&quot;2019-10-01&quot;</span>)  <span class="co"># 2019 Q4 — last pre-COVID quarter</span></span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>ref_idx  <span class="ot">&lt;-</span> <span class="fu">which</span>(us_gdp_vintage<span class="sc">$</span>date <span class="sc">==</span> ref_date)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a></span>
@@ -497,28 +497,32 @@ drift.</p>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>res_free      <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
 <span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>                             <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> <span class="cn">NULL</span>)</span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>res_anchored  <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>                             <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> fixed_bounds)</span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co"># Extend by one observation and refit</span></span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>y_demo_p1 <span class="ot">&lt;-</span> us_gdp_vintage<span class="sc">$</span>gdp_log[<span class="fu">seq_len</span>(n_demo <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>)]</span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>res_free_p1     <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo_p1, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>                               <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> <span class="cn">NULL</span>)</span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>res_anchored_p1 <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo_p1, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>                               <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> fixed_bounds)</span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a></span>
-<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="co"># Revision at the final shared observation (position n_demo)</span></span>
-<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>rev_free     <span class="ot">&lt;-</span> <span class="fu">abs</span>(res_free_p1<span class="sc">$</span>trend[n_demo]     <span class="sc">-</span> res_free<span class="sc">$</span>trend[n_demo])</span>
-<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>rev_anchored <span class="ot">&lt;-</span> <span class="fu">abs</span>(res_anchored_p1<span class="sc">$</span>trend[n_demo] <span class="sc">-</span> res_anchored<span class="sc">$</span>trend[n_demo])</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; Info: Huber threshold automatically calibrated to d = 0.005570 via HP cyclical MAD.</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>res_anchored  <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>                             <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> fixed_bounds)</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; Info: Huber threshold automatically calibrated to d = 0.005570 via HP cyclical MAD.</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co"># Extend by one observation and refit</span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>y_demo_p1 <span class="ot">&lt;-</span> us_gdp_vintage<span class="sc">$</span>gdp_log[<span class="fu">seq_len</span>(n_demo <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>)]</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>res_free_p1     <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo_p1, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>                               <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> <span class="cn">NULL</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; Info: Huber threshold automatically calibrated to d = 0.005547 via HP cyclical MAD.</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>res_anchored_p1 <span class="ot">&lt;-</span> <span class="fu">mbh_filter</span>(y_demo_p1, <span class="at">knots =</span> fixed_knots, <span class="at">df =</span> fixed_df,</span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>                               <span class="at">mstop =</span> fixed_mstop, <span class="at">boundary.knots =</span> fixed_bounds)</span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a><span class="co">#&gt; Info: Huber threshold automatically calibrated to d = 0.005547 via HP cyclical MAD.</span></span>
 <span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a></span>
-<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
-<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  <span class="st">&quot;Revision at obs %d after adding one data point:</span><span class="sc">\n</span><span class="st">  free domain   : %.6f</span><span class="sc">\n</span><span class="st">  anchored domain: %.6f</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
-<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>  n_demo, rev_free, rev_anchored</span>
-<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>))</span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co">#&gt; Revision at obs 200 after adding one data point:</span></span>
-<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co">#&gt;   free domain   : 0.000154</span></span>
-<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="co">#&gt;   anchored domain: 0.000069</span></span></code></pre></div>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="co"># Revision at the final shared observation (position n_demo)</span></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>rev_free     <span class="ot">&lt;-</span> <span class="fu">abs</span>(res_free_p1<span class="sc">$</span>trend[n_demo]     <span class="sc">-</span> res_free<span class="sc">$</span>trend[n_demo])</span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>rev_anchored <span class="ot">&lt;-</span> <span class="fu">abs</span>(res_anchored_p1<span class="sc">$</span>trend[n_demo] <span class="sc">-</span> res_anchored<span class="sc">$</span>trend[n_demo])</span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(</span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>  <span class="st">&quot;Revision at obs %d after adding one data point:</span><span class="sc">\n</span><span class="st">  free domain   : %.6f</span><span class="sc">\n</span><span class="st">  anchored domain: %.6f</span><span class="sc">\n</span><span class="st">&quot;</span>,</span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>  n_demo, rev_free, rev_anchored</span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>))</span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co">#&gt; Revision at obs 200 after adding one data point:</span></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a><span class="co">#&gt;   free domain   : 0.006897</span></span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a><span class="co">#&gt;   anchored domain: 0.007052</span></span></code></pre></div>
 <p>The anchored revision is smaller because a fixed
 <code>boundary.knots</code> removes a numerical artefact that would
 otherwise masquerade as genuine trend movement.</p>

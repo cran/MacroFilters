@@ -88,6 +88,13 @@ test_that("Auto-knots heuristic: n=100 gives knots = max(20, 50) = 50", {
   expect_equal(result$meta$knots, 50L)
 })
 
+test_that("Auto-knots heuristic caps at 250 for long series", {
+  set.seed(250)
+  y <- cumsum(rnorm(600))           # floor(600 / 2) = 300 -> capped to 250
+  result <- mbh_filter(y, mstop = 10L)
+  expect_equal(result$meta$knots, 250L)
+})
+
 test_that("Custom d parameter is stored correctly in meta", {
   set.seed(51)
   y <- cumsum(rnorm(100))
@@ -138,4 +145,21 @@ test_that("Meta contains all params: knots, d, mstop, nu, compute_time", {
   expect_equal(result$meta$mstop, 30L)
   expect_equal(result$meta$nu, 0.05)
   expect_true(is.numeric(result$meta$compute_time))
+})
+
+# ── 5. Auto-calibration message ──────────────────────────────────────────────
+
+test_that("d = 'auto' emits the calibration message", {
+  set.seed(12)
+  y <- cumsum(rnorm(80))
+  expect_message(
+    mbh_filter(y, mstop = 20L),
+    "automatically calibrated"
+  )
+})
+
+test_that("Explicit numeric d emits no calibration message", {
+  set.seed(13)
+  y <- cumsum(rnorm(80))
+  expect_no_message(mbh_filter(y, d = 0.02, mstop = 20L))
 })

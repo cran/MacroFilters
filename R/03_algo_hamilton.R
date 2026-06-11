@@ -15,6 +15,7 @@
 #'   auto-detected from the series frequency using Hamilton's rule:
 #'   annual = 2, quarterly = 8, monthly = 24.
 #' @param p Integer number of lags in the regression (default 4).
+#' @inheritParams mbh_filter
 #'
 #' @details
 #' Hamilton (2018) proposes replacing the HP filter with a simple regression:
@@ -29,8 +30,21 @@
 #' The lag matrix is constructed vectorized via `embed()` and the
 #' regression is solved with [stats::lm.fit()] for speed.
 #'
-#' @return A `macrofilter` object with `trend`, `cycle`, `data`, and `meta`
-#'   components. `meta` includes `h`, `p`, `coefficients`, and `compute_time`.
+#' When `boot_iter > 0`, the confidence band comes from a residual bootstrap
+#' that holds the observed lead-in fixed (conditional on initial values) and
+#' resamples residuals only over the valid window. A direct consequence is
+#' that the band is narrow at the start of the valid window -- where the
+#' predictors are entirely the (frozen) lead-in, so only the regression
+#' coefficients vary across replicates -- and widens forward as the predictors
+#' themselves become resampled quantities. This is the correct behaviour of a
+#' conditional bootstrap, not an artefact.
+#'
+#' @return A list of class `c("macrofilter", "list")` with `trend`, `cycle`,
+#'   `data`, and `meta` (`h`, `p`, `coefficients`, `compute_time`). When
+#'   `boot_iter > 0` it also carries `trend_lower` and `trend_upper` (95%
+#'   normal-approximation band). The bootstrap is a residual bootstrap
+#'   conditional on the initial `h + p - 1` observations (the regression
+#'   lead-in is held fixed); band entries for those lead-in positions are `NA`.
 #'
 #' @references
 #' Hamilton, J.D. (2018). Why You Should Never Use the Hodrick-Prescott
@@ -44,7 +58,8 @@
 #' y <- ts(cumsum(rnorm(200)), start = c(2000, 1), frequency = 4)
 #' result <- hamilton_filter(y)
 #' print(result)
-hamilton_filter <- function(x, h = NULL, p = 4L) {
+hamilton_filter <- function(x, h = NULL, p = 4L,
+                            boot_iter = 0, block_size = "auto") {
 
   # 1. Ingest ----------------------------------------------------------------
   inputs <- ensure_computable(x)
@@ -115,20 +130,55 @@ hamilton_filter <- function(x, h = NULL, p = 4L) {
 
   elapsed <- (proc.time() - t0)[["elapsed"]]
 
-  # 7. Package into macrofilter -----------------------------------------------
-  result <- new_macrofilter(
-    cycle = cycle_num,
+  # 7. Optional block bootstrap (valid window, frozen lead-in) ---------------
+  # Hamilton pads the first h + p - 1 obs with NA and uses them as regression
+  # predictors. We resample residuals only on the valid window [p+h, n], hold
+  # the observed lead-in fixed (conditional residual bootstrap), refit, and
+  # leave the lead-in band entries as NA.
+  ci_bands <- NULL
+  if (boot_iter > 0L) {
+    valid <- (p + h):n
+    bs    <- .resolve_block_size(x, block_size, length(valid))
+    lead  <- y[seq_len(p + h - 1L)]
+    ff <- function(y_bv) {
+      y_full     <- c(lead, y_bv)
+      trend_full <- y_full - .hamilton_fast(y_full, h, p)
+      trend_full[(p + h):length(y_full)]      # valid-window trend (length n_valid)
+    }
+    ci_valid <- .boot_engine(
+      filter_func = ff,
+      trend_base  = trend_num[valid],
+      cycle_base  = cycle_num[valid],
+      boot_iter   = as.integer(boot_iter),
+      block_size  = bs
+    )
+    ci_bands <- list(lower = rep(NA_real_, n), upper = rep(NA_real_, n))
+    ci_bands$lower[valid] <- ci_valid$lower
+    ci_bands$upper[valid] <- ci_valid$upper
+  }
+
+  # 8. Build S3 result --------------------------------------------------------
+  result <- list(
     trend = trend_num,
+    cycle = cycle_num,
     data  = y,
     meta  = list(
       method       = "Hamilton",
       h            = h,
       p            = p,
       coefficients = fit$coefficients,
-      compute_time = elapsed
+      compute_time = elapsed,
+      ts_class     = inputs$class,
+      tsp          = inputs$tsp,
+      idx          = inputs$idx
     )
   )
-  validate_macrofilter(result)
+  if (!is.null(ci_bands)) {
+    result$trend_lower <- ci_bands$lower
+    result$trend_upper <- ci_bands$upper
+  }
+  class(result) <- c("macrofilter", "list")
 
+  validate_macrofilter(result)
   result
 }

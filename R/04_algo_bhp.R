@@ -26,6 +26,7 @@
 #' @param freq Numeric frequency override (1 = annual, 4 = quarterly,
 #'   12 = monthly). Used only when `lambda` is `NULL` and the frequency cannot
 #'   be inferred from `x`.
+#' @inheritParams mbh_filter
 #'
 #' @details
 #' The boosted HP filter starts from the standard HP solution and then
@@ -43,9 +44,12 @@
 #'   \item{`"fixed"`}{Runs exactly `iter_max` iterations.}
 #' }
 #'
-#' @return A `macrofilter` object with `trend`, `cycle`, `data`, and `meta`
-#'   components.  The `meta` list contains `method = "bHP"`, `lambda`,
-#'   `iterations`, `stopping_rule`, and `compute_time`.
+#' @return A list of class `c("macrofilter", "list")` with `trend`, `cycle`,
+#'   `data`, and `meta` (`method = "bHP"`, `lambda`, `iterations`,
+#'   `stopping_rule`, `compute_time`). When `boot_iter > 0` it also carries
+#'   `trend_lower` and `trend_upper` (95% normal-approximation bootstrap band);
+#'   each bootstrap refit runs a *fixed* `iterations` passes, conditioning on
+#'   the complexity selected by the base fit.
 #'
 #' @references
 #' Phillips, P.C.B. and Shi, Z. (2021). Boosting: Why You Can Use the HP
@@ -62,7 +66,8 @@
 #' print(result)
 bhp_filter <- function(x, lambda = NULL, iter_max = 100L,
                        stopping = c("bic", "adf", "fixed"),
-                       sig_level = 0.05, freq = NULL) {
+                       sig_level = 0.05, freq = NULL,
+                       boot_iter = 0, block_size = "auto") {
 
   # 1. Ingest ----------------------------------------------------------------
   inputs <- ensure_computable(x)
@@ -108,6 +113,10 @@ bhp_filter <- function(x, lambda = NULL, iter_max = 100L,
   )
   Q <- Matrix::Diagonal(n) + lambda * Matrix::crossprod(D)
 
+  # Factorize once: reused by every base iteration AND every bootstrap
+  # replicate. Q itself is retained only for the BIC eigendecomposition below.
+  CH <- Matrix::Cholesky(Matrix::forceSymmetric(Q))
+
   # 6. BIC precomputation (eigenvalues of Q) ---------------------------------
   if (stopping == "bic") {
     if (n > 5000L) {
@@ -127,7 +136,7 @@ bhp_filter <- function(x, lambda = NULL, iter_max = 100L,
 
   # 8. Boosting loop ---------------------------------------------------------
   # Iteration 1
-  res <- .hp_solve(y, Q)
+  res <- .hp_solve(y, CH)
   f_hat <- res$trend
   u     <- res$cycle
 
@@ -145,7 +154,7 @@ bhp_filter <- function(x, lambda = NULL, iter_max = 100L,
   # Iterations 2..iter_max
   if (iter_max > 1L) {
     for (k in 2L:iter_max) {
-      res_k <- .hp_solve(u, Q)
+      res_k <- .hp_solve(u, CH)
       f_hat <- f_hat + res_k$trend
       u     <- res_k$cycle
 
@@ -157,7 +166,9 @@ bhp_filter <- function(x, lambda = NULL, iter_max = 100L,
       }
 
       if (stopping == "adf") {
-        adf_p <- tseries::adf.test(u)$p.value
+        # adf.test() warns when the statistic falls outside its p-value table
+        # (very stationary residual, p < 0.01); we only use the numeric value.
+        adf_p <- suppressWarnings(tseries::adf.test(u)$p.value)
         if (adf_p < sig_level) {
           final_iter  <- k
           final_trend <- f_hat
@@ -193,31 +204,54 @@ bhp_filter <- function(x, lambda = NULL, iter_max = 100L,
 
   elapsed <- (proc.time() - t0)[["elapsed"]]
 
-  # 9. Package into macrofilter -----------------------------------------------
-  result <- new_macrofilter(
-    cycle = final_cycle,
+  # 9. Optional block bootstrap ----------------------------------------------
+  ci_bands <- NULL
+  if (boot_iter > 0L) {
+    bs <- .resolve_block_size(x, block_size, n)
+    # Reuse the factor CH built for the base fit (no rebuild).
+    ff <- function(y_b) y_b - .bhp_fast(y_b, CH = CH, iter = final_iter)
+    ci_bands <- .boot_engine(
+      filter_func = ff,
+      trend_base  = final_trend,
+      cycle_base  = final_cycle,
+      boot_iter   = as.integer(boot_iter),
+      block_size  = bs
+    )
+  }
+
+  # 10. Build S3 result -------------------------------------------------------
+  result <- list(
     trend = final_trend,
+    cycle = final_cycle,
     data  = y,
     meta  = list(
       method        = "bHP",
       lambda        = lambda,
       iterations    = final_iter,
       stopping_rule = stopping,
-      compute_time  = elapsed
+      compute_time  = elapsed,
+      ts_class      = inputs$class,
+      tsp           = inputs$tsp,
+      idx           = inputs$idx
     )
   )
+  if (!is.null(ci_bands)) {
+    result$trend_lower <- ci_bands$lower
+    result$trend_upper <- ci_bands$upper
+  }
+  class(result) <- c("macrofilter", "list")
 
-  # 10. Validate --------------------------------------------------------------
   validate_macrofilter(result)
-
   result
 }
 
 # ── Internal helper ─────────────────────────────────────────────────────────
-#' Apply one HP smoothing pass given a precomputed system matrix
+#' Apply one HP smoothing pass given a precomputed system factor
 #'
 #' @param y Numeric vector to smooth.
-#' @param Q Precomputed sparse system matrix (I + lambda * D'D).
+#' @param Q Precomputed HP system: either the sparse matrix `I + lambda * D'D`
+#'   or its Cholesky factor from [Matrix::Cholesky()]; both dispatch through
+#'   [Matrix::solve()].
 #' @return A list with `trend` and `cycle` numeric vectors.
 #' @noRd
 #' @keywords internal

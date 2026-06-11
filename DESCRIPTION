@@ -1,6 +1,6 @@
 Package: MacroFilters
 Title: Robust Trend-Cycle Decomposition for Macroeconomic Time Series
-Version: 0.1.0
+Version: 0.2.1
 Authors@R: 
     person("Michal", "Kinel", , "michal.kinel@gmail.com", role = c("aut", "cre"),
            comment = c(ORCID = "0009-0007-3295-7199"))
@@ -19,19 +19,20 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Language: en-US
 LazyData: true
-RoxygenNote: 7.3.3
 URL: https://github.com/michal0091/MacroFilters,
         https://michal0091.github.io/MacroFilters/
 BugReports: https://github.com/michal0091/MacroFilters/issues
-Imports: Matrix, mboost, tseries
-Suggests: data.table, ggplot2, knitr, rmarkdown, scales, strucchange,
-        testthat (>= 3.0.0), usethis, xts, zoo
+Imports: data.table, ggplot2, Matrix, mboost, tseries
+Suggests: knitr, rmarkdown, scales, strucchange, testthat (>= 3.0.0),
+        usethis, xts, zoo
 VignetteBuilder: knitr
+Depends: R (>= 3.5)
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
 NeedsCompilation: no
-Packaged: 2026-05-20 16:46:23 UTC; miki
+Packaged: 2026-06-11 20:35:41 UTC; miki
 Author: Michal Kinel [aut, cre] (ORCID:
     <https://orcid.org/0009-0007-3295-7199>)
 Maintainer: Michal Kinel <michal.kinel@gmail.com>
-Depends: R (>= 3.5.0)
 Repository: CRAN
-Date/Publication: 2026-05-27 20:00:07 UTC
+Date/Publication: 2026-06-11 21:00:02 UTC

@@ -4,7 +4,7 @@
 \alias{hp_filter}
 \title{Hodrick-Prescott Filter (Sparse Matrix Implementation)}
 \usage{
-hp_filter(x, lambda = NULL, freq = NULL)
+hp_filter(x, lambda = NULL, freq = NULL, boot_iter = 0, block_size = "auto")
 }
 \arguments{
 \item{x}{Numeric vector, \code{ts}, \code{xts}, or \code{zoo} object.}
@@ -16,10 +16,27 @@ If \code{NULL} (default), it is auto-detected using the Ravn-Uhlig rule
 \item{freq}{Numeric frequency override (1 = annual, 4 = quarterly,
 12 = monthly). Used only when \code{lambda} is \code{NULL} and the frequency cannot
 be inferred from \code{x}.}
+
+\item{boot_iter}{Non-negative integer.
+Number of block-bootstrap iterations for uncertainty quantification
+(default \code{0}, bootstrap disabled). When \verb{> 0}, the function adds
+\verb{$trend_lower} and \verb{$trend_upper}: a 95\% normal-approximation band,
+\verb{trend +/- 1.96 * sd(bootstrap trends)}, centred on the estimated trend.
+The bootstrap sd is used instead of empirical percentiles because it is
+smooth and stable at practical \code{boot_iter}. Each bootstrap refit uses the
+same \code{mstop} as the base fit, so larger \code{boot_iter} raises cost linearly.
+See also \code{block_size}.}
+
+\item{block_size}{Positive integer or \code{"auto"}.
+Block length for the moving-block bootstrap (used only when
+\code{boot_iter > 0}). If \code{"auto"} (default), it is set to
+\code{2 * stats::frequency(x)} (two full cycles), bounded above by
+\code{floor(length(x) / 3)} to keep at least three blocks.}
 }
 \value{
-A \code{macrofilter} object with \code{trend}, \code{cycle}, \code{data}, and \code{meta}
-components.
+A list of class \code{c("macrofilter", "list")} with \code{trend}, \code{cycle},
+\code{data}, and \code{meta}. When \code{boot_iter > 0} it also carries \code{trend_lower}
+and \code{trend_upper} (95\% normal-approximation bootstrap band).
 }
 \description{
 Decomposes a time series into trend and cycle components by solving the
@@ -36,7 +53,7 @@ where \eqn{D} is the second-difference operator.
 
 The implementation builds \eqn{D} as a banded sparse matrix
 (\code{\link[Matrix:bandSparse]{Matrix::bandSparse()}}) and solves the symmetric positive-definite system
-with a sparse Cholesky decomposition (\code{\link[Matrix:solve-methods]{Matrix::solve()}}).
+with a sparse Cholesky decomposition (\code{\link[Matrix:solve]{Matrix::solve()}}).
 
 When \code{lambda} is not supplied the Ravn-Uhlig (2002) rule is applied:
 \code{lambda = 6.25 * freq^4}, yielding 6.25 (annual), 1600 (quarterly), and

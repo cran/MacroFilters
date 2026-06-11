@@ -99,23 +99,31 @@ print(p_d)
 ## ----benchmark, cache=TRUE----------------------------------------------------
 y          <- us_gdp_vintage$gdp_log
 mstop_grid <- seq(100L, 1000L, by = 100L)   # 10 evenly-spaced points
+n_rep      <- 5L                            # replicates per point
 
+# Single-shot timings are dominated by GC pauses and OS scheduling, which
+# produce spurious spikes. We warm up once, then time several runs with a
+# clean heap (gc()) before each and report the MEDIAN, recovering the
+# monotone wall-time vs mstop relationship.
 bench_dt <- rbindlist(lapply(mstop_grid, function(m) {
-  t0       <- proc.time()
-  res      <- mbh_filter(y, mstop = m)
-  elapsed  <- (proc.time() - t0)[["elapsed"]]
-  cycle_sd <- sd(res$cycle)
+  res  <- suppressMessages(mbh_filter(y, mstop = m))   # warm-up + cycle SD
+  reps <- vapply(seq_len(n_rep), function(i) {
+    gc(verbose = FALSE)
+    t0 <- proc.time()
+    suppressMessages(mbh_filter(y, mstop = m))
+    (proc.time() - t0)[["elapsed"]]
+  }, numeric(1))
   data.table(
     mstop       = m,
-    elapsed_sec = round(elapsed, 3),
-    cycle_sd    = round(cycle_sd, 6)
+    elapsed_sec = round(median(reps), 3),
+    cycle_sd    = round(sd(res$cycle), 6)
   )
 }))
 
 knitr::kable(
   bench_dt,
   col.names = c("mstop", "Wall time (s)", "Cycle SD"),
-  caption   = "MBH computational benchmark — US log GDP (316 obs)"
+  caption   = sprintf("MBH computational benchmark — US log GDP (%d obs)", length(y))
 )
 
 ## ----benchmark-plot-----------------------------------------------------------
@@ -144,7 +152,7 @@ p_bench <- ggplot(bench_dt, aes(x = mstop)) +
   ) +
   labs(
     title    = "Wall Time vs Boosting Iterations",
-    subtitle = "US Real GDP log level (316 obs). Cycle SD plateaus well before mstop = 500.",
+    subtitle = sprintf("US Real GDP log level (%d obs). Cycle SD plateaus well before mstop = 500.", length(y)),
     x        = "mstop"
   ) +
   theme_minimal(base_size = 12) +
@@ -158,7 +166,7 @@ print(p_bench)
 ## ----summary-table, echo=FALSE------------------------------------------------
 summary_tbl <- data.table(
   Parameter = c("`mstop`", "`nu`", "`knots`", "`d`"),
-  Default   = c("500", "0.1", "`max(20, n/2)`", "auto via MAD"),
+  Default   = c("500", "0.1", "`min(max(20, n/2), 250)`", "auto via MAD"),
   `When to increase` = c(
     "Publication accuracy required",
     "Very long series; computational budget tight",

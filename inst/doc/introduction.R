@@ -10,6 +10,8 @@ knitr::opts_chunk$set(
 ## ----setup, message=FALSE-----------------------------------------------------
 library(MacroFilters)
 library(ggplot2)
+data("fr_gdp", package = "MacroFilters")
+data("es_gdp", package = "MacroFilters")
 
 ## ----input-agnosticism--------------------------------------------------------
 set.seed(7)
@@ -65,66 +67,71 @@ ham
 bhp <- bhp_filter(y, stopping = "bic")
 bhp
 
+## ----fred-download, eval=FALSE------------------------------------------------
+# # FRED public endpoint — no API key needed.
+# # See data-raw/intl_gdp.R for the full reproducible download script.
+# read_fred <- function(id) {
+#   url <- sprintf("https://fred.stlouisfed.org/graph/fredgraph.csv?id=%s", id)
+#   dt  <- read.csv(url, col.names = c("date", "gdp_real"), na.strings = ".")
+#   dt$date    <- as.Date(dt$date)
+#   dt$gdp_log <- log(as.numeric(dt$gdp_real))
+#   dt[!is.na(dt$gdp_real), ]
+# }
+# fr_raw <- read_fred("CLVMNACSCAB1GQFR")
+# es_raw <- read_fred("CLVMNACSCAB1GQES")
+
 ## ----mbh-demo-----------------------------------------------------------------
-set.seed(42)
-n <- 80
-t <- 1:n
+# Apply HP + MBH per country.
+# For log-level series, auto d (MAD of diff) is too tight — calibrate d on the
+# cycle scale instead (see vignette "Hyperparameter Tuning for the MBH Filter").
+make_trend_df <- function(raw, country) {
+  dt  <- raw[raw$date >= as.Date("2000-01-01"), ]
+  g   <- ts(dt$gdp_log, start = c(2000, 1), frequency = 4)
+  hp  <- hp_filter(g)
+  mbh <- mbh_filter(g, d = mad(hp$cycle))
+  data.frame(country  = country,
+             t        = as.numeric(time(g)),
+             observed = as.numeric(g),
+             hp       = as.numeric(hp$trend),
+             mbh      = as.numeric(mbh$trend))
+}
 
-# 1. Define simulation parameters
-sd_noise <- 1.8
-trend    <- 100 + 0.3 * t + 0.005 * t^2
-cycle    <- 2.5 * sin(2 * pi * t / 28) # 7-year business cycle
+df_plot <- rbind(
+  make_trend_df(fr_gdp, "France"),
+  make_trend_df(es_gdp, "Spain")
+)
 
-# 2. Simulate GDP index
-gdp_num <- trend + cycle + rnorm(n, sd = sd_noise)
-
-# 3. Inject a structural shock (e.g., COVID-19 lockdown)
-# Expressed as extreme standard deviation events
-gdp_num[60] <- gdp_num[60] - (16 * sd_noise) # Massive crash
-gdp_num[61] <- gdp_num[61] - (9 * sd_noise)  # Partial recovery
-gdp_num[62] <- gdp_num[62] - (4 * sd_noise)  # V Stabilization
-gdp_num[62] <- gdp_num[62] - (2 * sd_noise)  # Stabilization
-
-gdp <- ts(gdp_num, start = c(2001, 1), frequency = 4)
-
-# Extract trends
+# Keep Spain filter objects for the S3 class examples in Section 5
+dt_es   <- es_gdp[es_gdp$date >= as.Date("2000-01-01"), ]
+gdp     <- ts(dt_es$gdp_log, start = c(2000, 1), frequency = 4)
 hp_res  <- hp_filter(gdp)
-
-# MBH Filter: Auto-calibrated threshold (d) based on MAD of differences
-mbh_res <- mbh_filter(gdp) 
+mbh_res <- mbh_filter(gdp, d = mad(hp_res$cycle))
 
 mbh_res
 
 ## ----mbh-plot, echo=FALSE-----------------------------------------------------
-df_mbh <- data.frame(
-  t    = as.numeric(time(gdp)),
-  data = as.numeric(gdp),
-  hp   = as.numeric(hp_res$trend),
-  mbh  = as.numeric(mbh_res$trend)
-)
-
-ggplot(df_mbh, aes(x = t)) +
-  geom_line(aes(y = data, colour = "Observed"),   linewidth = 0.6, linetype = "dashed") +
-  geom_line(aes(y = hp,   colour = "HP trend"),   linewidth = 1.0) +
-  geom_line(aes(y = mbh,  colour = "MBH trend"),  linewidth = 1.1) +
+ggplot(df_plot, aes(x = t)) +
+  geom_line(aes(y = observed, colour = "Observed"),  linewidth = 0.6, linetype = "dashed") +
+  geom_line(aes(y = hp,       colour = "HP trend"),  linewidth = 1.0) +
+  geom_line(aes(y = mbh,      colour = "MBH trend"), linewidth = 1.1) +
   annotate("rect",
-           xmin = df_mbh$t[59], xmax = df_mbh$t[63],
+           xmin = 2020.00, xmax = 2020.75,
            ymin = -Inf, ymax = Inf,
            alpha = 0.12, fill = "firebrick") +
   annotate("text",
-           x = df_mbh$t[61], y = max(df_mbh$data, na.rm = TRUE),
-           label = "COVID shock", vjust = -0.5,
-           size  = 3.5, colour = "firebrick") +
+           x = 2020.375, y = Inf, vjust = 1.4,
+           label = "COVID-19\n2020 Q2", size = 3.2, colour = "firebrick") +
   scale_colour_manual(
     values = c("Observed" = "grey60", "HP trend" = "#0072B2", "MBH trend" = "#E69F00")
   ) +
+  facet_wrap(~country, scales = "free_y") +
   labs(
     title    = "HP vs MBH under a Structural Shock",
-    subtitle = "MBH trend (orange) stays smooth; HP trend (blue) is pulled down",
-    x = "Year", y = "GDP Index", colour = NULL
+    subtitle = "MBH trend (orange) stays smooth;\nHP trend (blue) is pulled down by the COVID crash",
+    x = "Year", y = "Log Real GDP", colour = NULL
   ) +
   theme_minimal(base_size = 12) +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom", strip.text = element_text(face = "bold"))
 
 ## ----s3-print-----------------------------------------------------------------
 mbh_res
@@ -152,7 +159,7 @@ ggplot(df_cycle, aes(x = t)) +
   geom_line(aes(y = HP_cycle,  colour = "HP cycle"),  linewidth = 0.8) +
   geom_line(aes(y = MBH_cycle, colour = "MBH cycle"), linewidth = 0.8) +
   annotate("rect",
-           xmin = df_cycle$t[59], xmax = df_cycle$t[63],
+           xmin = 2020.00, xmax = 2020.75,
            ymin = -Inf, ymax = Inf,
            alpha = 0.12, fill = "firebrick") +
   scale_colour_manual(values = c("HP cycle" = "#0072B2", "MBH cycle" = "#E69F00")) +

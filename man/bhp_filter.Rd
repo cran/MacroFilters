@@ -10,7 +10,9 @@ bhp_filter(
   iter_max = 100L,
   stopping = c("bic", "adf", "fixed"),
   sig_level = 0.05,
-  freq = NULL
+  freq = NULL,
+  boot_iter = 0,
+  block_size = "auto"
 )
 }
 \arguments{
@@ -33,11 +35,30 @@ Significance level for the ADF test when \code{stopping = "adf"}
 \item{freq}{Numeric frequency override (1 = annual, 4 = quarterly,
 12 = monthly). Used only when \code{lambda} is \code{NULL} and the frequency cannot
 be inferred from \code{x}.}
+
+\item{boot_iter}{Non-negative integer.
+Number of block-bootstrap iterations for uncertainty quantification
+(default \code{0}, bootstrap disabled). When \verb{> 0}, the function adds
+\verb{$trend_lower} and \verb{$trend_upper}: a 95\% normal-approximation band,
+\verb{trend +/- 1.96 * sd(bootstrap trends)}, centred on the estimated trend.
+The bootstrap sd is used instead of empirical percentiles because it is
+smooth and stable at practical \code{boot_iter}. Each bootstrap refit uses the
+same \code{mstop} as the base fit, so larger \code{boot_iter} raises cost linearly.
+See also \code{block_size}.}
+
+\item{block_size}{Positive integer or \code{"auto"}.
+Block length for the moving-block bootstrap (used only when
+\code{boot_iter > 0}). If \code{"auto"} (default), it is set to
+\code{2 * stats::frequency(x)} (two full cycles), bounded above by
+\code{floor(length(x) / 3)} to keep at least three blocks.}
 }
 \value{
-A \code{macrofilter} object with \code{trend}, \code{cycle}, \code{data}, and \code{meta}
-components.  The \code{meta} list contains \code{method = "bHP"}, \code{lambda},
-\code{iterations}, \code{stopping_rule}, and \code{compute_time}.
+A list of class \code{c("macrofilter", "list")} with \code{trend}, \code{cycle},
+\code{data}, and \code{meta} (\code{method = "bHP"}, \code{lambda}, \code{iterations},
+\code{stopping_rule}, \code{compute_time}). When \code{boot_iter > 0} it also carries
+\code{trend_lower} and \code{trend_upper} (95\% normal-approximation bootstrap band);
+each bootstrap refit runs a \emph{fixed} \code{iterations} passes, conditioning on
+the complexity selected by the base fit.
 }
 \description{
 Iteratively applies the Hodrick-Prescott filter on residuals to better

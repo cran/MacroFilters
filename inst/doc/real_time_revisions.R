@@ -9,7 +9,7 @@ library(ggplot2)
 data("us_gdp_vintage", package = "MacroFilters")
 
 ## ----expanding-window, cache=TRUE---------------------------------------------
-T_max    <- nrow(us_gdp_vintage)   # full-sample size (316 rows as of 2025)
+T_max    <- nrow(us_gdp_vintage)   # full-sample size (computed from the data)
 ref_date <- as.Date("2019-10-01")  # 2019 Q4 — last pre-COVID quarter
 ref_idx  <- which(us_gdp_vintage$date == ref_date)
 

@@ -1,9 +1,18 @@
 bibentry(
+  bibtype = "Manual",
+  title = "MacroFilters: Robust Trend-Cycle Decomposition for Macroeconomic Time Series",
+  author = person("Michal", "Kinel"),
+  year = "2026",
+  note = "R package version 0.1.0",
+  url = "https://CRAN.R-project.org/package=MacroFilters",
+  doi = "10.32614/CRAN.package.MacroFilters"
+)
+
+bibentry(
   bibtype = "Unpublished",
   title = "Robust Real-Time Macroeconomic Trend Extraction: A Gradient Boosting Approach",
   author = person("Michal", "Kinel"),
-  year = 2026,
+  year = "2026",
   note = "Working Paper, SSRN",
-  url = "https://doi.org/10.2139/ssrn.6371138",
-  doi = "10.2139/ssrn.6371138"
+  url = "https://ssrn.com/abstract=6371138"
 )

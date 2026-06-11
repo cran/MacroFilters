@@ -1,8 +1,15 @@
 
 # MacroFilters <img src="man/figures/logo.png" align="right" height="139" alt="" />
 
-[](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[](https://github.com/michal0091/MacroFilters/actions/workflows/R-CMD-check.yaml)
+<!-- badges: start -->
+
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![R-CMD-check](https://github.com/michal0091/MacroFilters/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/michal0091/MacroFilters/actions/workflows/R-CMD-check.yaml)
+[![CRAN
+status](https://www.r-pkg.org/badges/version/MacroFilters)](https://CRAN.R-project.org/package=MacroFilters)
+[![DOI](https://zenodo.org/badge/DOI/10.32614/CRAN.package.MacroFilters.svg)](https://doi.org/10.32614/CRAN.package.MacroFilters)
+<!-- badges: end -->
 
 > **Working Paper Available:** The econometric methodology and
 > mathematical proofs underlying this package are distributed via SSRN:
@@ -67,7 +74,7 @@ devtools::install_github("michal0091/MacroFilters")
 | `bhp_filter()` | Boosted HP — Phillips & Shi (2021) | Iterative fitting with BIC/ADF stopping |
 | `mbh_filter()` | MacroBoost Hybrid | Robust to outliers via Huber loss |
 
-All functions return a `macrofilter` S3 object.
+All functions return a list of class `c("macrofilter", "list")`.
 
 ``` r
 library(MacroFilters)
@@ -79,9 +86,15 @@ mbh_result <- mbh_filter(us_gdp_xts)
 # Access components directly
 mbh_result$trend
 mbh_result$cycle
+
+# Add 95% bootstrap confidence bands and plot them
+mbh_ci <- mbh_filter(us_gdp_xts, boot_iter = 50L)
+autoplot(mbh_ci)            # ggplot: trend, observed series and confidence ribbon
 ```
 
 ## Further Reading
 
-See `vignette("introduction", package = "MacroFilters")` for a full
-walkthrough covering all four filters and the S3 print/meta interface.
+- `vignette("introduction", package = "MacroFilters")` — full
+  walkthrough of all four filters and the S3 print/meta interface.
+- `vignette("uncertainty_bands", package = "MacroFilters")` — confidence
+  bands via block bootstrap and the `autoplot()` method.

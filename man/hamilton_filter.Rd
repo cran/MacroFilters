@@ -4,7 +4,7 @@
 \alias{hamilton_filter}
 \title{Hamilton Filter}
 \usage{
-hamilton_filter(x, h = NULL, p = 4L)
+hamilton_filter(x, h = NULL, p = 4L, boot_iter = 0, block_size = "auto")
 }
 \arguments{
 \item{x}{Numeric vector, \code{ts}, \code{xts}, or \code{zoo} object.}
@@ -14,10 +14,30 @@ auto-detected from the series frequency using Hamilton's rule:
 annual = 2, quarterly = 8, monthly = 24.}
 
 \item{p}{Integer number of lags in the regression (default 4).}
+
+\item{boot_iter}{Non-negative integer.
+Number of block-bootstrap iterations for uncertainty quantification
+(default \code{0}, bootstrap disabled). When \verb{> 0}, the function adds
+\verb{$trend_lower} and \verb{$trend_upper}: a 95\% normal-approximation band,
+\verb{trend +/- 1.96 * sd(bootstrap trends)}, centred on the estimated trend.
+The bootstrap sd is used instead of empirical percentiles because it is
+smooth and stable at practical \code{boot_iter}. Each bootstrap refit uses the
+same \code{mstop} as the base fit, so larger \code{boot_iter} raises cost linearly.
+See also \code{block_size}.}
+
+\item{block_size}{Positive integer or \code{"auto"}.
+Block length for the moving-block bootstrap (used only when
+\code{boot_iter > 0}). If \code{"auto"} (default), it is set to
+\code{2 * stats::frequency(x)} (two full cycles), bounded above by
+\code{floor(length(x) / 3)} to keep at least three blocks.}
 }
 \value{
-A \code{macrofilter} object with \code{trend}, \code{cycle}, \code{data}, and \code{meta}
-components. \code{meta} includes \code{h}, \code{p}, \code{coefficients}, and \code{compute_time}.
+A list of class \code{c("macrofilter", "list")} with \code{trend}, \code{cycle},
+\code{data}, and \code{meta} (\code{h}, \code{p}, \code{coefficients}, \code{compute_time}). When
+\code{boot_iter > 0} it also carries \code{trend_lower} and \code{trend_upper} (95\%
+normal-approximation band). The bootstrap is a residual bootstrap
+conditional on the initial \code{h + p - 1} observations (the regression
+lead-in is held fixed); band entries for those lead-in positions are \code{NA}.
 }
 \description{
 Decomposes a time series into trend and cycle components using the
@@ -36,7 +56,16 @@ The first \eqn{h + p - 1} observations have no computable trend or cycle
 and are filled with \code{NA}.
 
 The lag matrix is constructed vectorized via \code{embed()} and the
-regression is solved with \code{\link[stats:lmfit]{stats::lm.fit()}} for speed.
+regression is solved with \code{\link[stats:lm.fit]{stats::lm.fit()}} for speed.
+
+When \code{boot_iter > 0}, the confidence band comes from a residual bootstrap
+that holds the observed lead-in fixed (conditional on initial values) and
+resamples residuals only over the valid window. A direct consequence is
+that the band is narrow at the start of the valid window -- where the
+predictors are entirely the (frozen) lead-in, so only the regression
+coefficients vary across replicates -- and widens forward as the predictors
+themselves become resampled quantities. This is the correct behaviour of a
+conditional bootstrap, not an artefact.
 }
 \examples{
 # Quarterly GDP-like series

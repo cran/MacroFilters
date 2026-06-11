@@ -35,3 +35,67 @@
 #'      type = "l", xlab = "Date", ylab = "Log Real GDP",
 #'      main = "US Real GDP (log level)")
 "us_gdp_vintage"
+
+#' France Real GDP — FRED Vintage
+#'
+#' Quarterly France Real Gross Domestic Product from the Federal Reserve Bank of
+#' St. Louis (FRED) public data API (series **CLVMNACSCAB1GQFR**), expressed in
+#' millions of chained 2015 EUR, seasonally adjusted.
+#' Original source: Eurostat/OECD National Accounts via FRED.
+#'
+#' @format A `data.table` with one row per quarter and three columns:
+#' \describe{
+#'   \item{`date`}{`Date`. Quarter start date (e.g. `2000-01-01` = 2000 Q1).}
+#'   \item{`gdp_real`}{`numeric`. Real GDP level, millions of chained 2015 EUR.}
+#'   \item{`gdp_log`}{`numeric`. Natural logarithm of `gdp_real`, pre-computed
+#'     for convenience.}
+#' }
+#'
+#' @details
+#' France experienced a sharp COVID-19 contraction of approximately
+#' \eqn{-14\%} quarter-on-quarter in 2020 Q2, followed by a rapid V-shaped
+#' recovery.  Together with Spain (`es_gdp`), the two series serve as a
+#' demanding stress test for trend filters in the introduction vignette.
+#'
+#' @source
+#' Federal Reserve Bank of St. Louis — FRED Economic Data,
+#' series CLVMNACSCAB1GQFR. Downloaded via the public CSV endpoint
+#' `https://fred.stlouisfed.org/graph/fredgraph.csv?id=CLVMNACSCAB1GQFR`.
+#' See `data-raw/intl_gdp.R` for the reproducible download script.
+#'
+#' @examples
+#' data("fr_gdp", package = "MacroFilters")
+#' head(fr_gdp)
+"fr_gdp"
+
+#' Spain Real GDP — FRED Vintage
+#'
+#' Quarterly Spain Real Gross Domestic Product from the Federal Reserve Bank of
+#' St. Louis (FRED) public data API (series **CLVMNACSCAB1GQES**), expressed in
+#' millions of chained 2015 EUR, seasonally adjusted.
+#' Original source: Eurostat/OECD National Accounts via FRED.
+#'
+#' @format A `data.table` with one row per quarter and three columns:
+#' \describe{
+#'   \item{`date`}{`Date`. Quarter start date (e.g. `2000-01-01` = 2000 Q1).}
+#'   \item{`gdp_real`}{`numeric`. Real GDP level, millions of chained 2015 EUR.}
+#'   \item{`gdp_log`}{`numeric`. Natural logarithm of `gdp_real`, pre-computed
+#'     for convenience.}
+#' }
+#'
+#' @details
+#' Spain experienced one of the sharpest COVID-19 contractions in the EU:
+#' approximately \eqn{-18\%} quarter-on-quarter in 2020 Q2, followed by a
+#' strong V-shaped recovery in 2020 Q3.  The series starts in 1995 Q1 under
+#' ESA 2010 methodology.
+#'
+#' @source
+#' Federal Reserve Bank of St. Louis — FRED Economic Data,
+#' series CLVMNACSCAB1GQES. Downloaded via the public CSV endpoint
+#' `https://fred.stlouisfed.org/graph/fredgraph.csv?id=CLVMNACSCAB1GQES`.
+#' See `data-raw/intl_gdp.R` for the reproducible download script.
+#'
+#' @examples
+#' data("es_gdp", package = "MacroFilters")
+#' head(es_gdp)
+"es_gdp"
